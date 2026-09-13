@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Apex Tactics - Coach Board</title>
+    <!-- Include html2canvas for capturing the board -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        :root {
+            /* Premium Dark Theme Colors */
+            --bg-base: #09090b;       
+            --bg-panel: #18181b;      
+            --bg-card: #27272a;       
+            --bg-card-hover: #3f3f46;
+            --accent-primary: #3b82f6; 
+            --text-main: #f8fafc;
+            --text-muted: #a1a1aa;
+            
+            /* Enhanced Pitch Colors */
+            --pitch-bg: #1b4d2e;      
+            --pitch-lines: rgba(255, 255, 255, 0.45);
+            
+            /* Tactical Chip Colors */
+            --home-bg: #ef4444;       
+            --home-arrow: #f87171;
+            --opp-bg: #3b82f6;        
+            --opp-arrow: #60a5fa;
+            --ball-bg: #ffffff;
+            --ball-arrow: #e2e8f0;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* --- PITCH AREA --- */
+        .pitch-wrapper {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 12px 12px 24px 12px;
+            overflow: hidden;
+            min-height: 0; 
+        }
+
+        .pitch {
+            width: 100%;
+            height: 100%;
+            max-width: 500px;
+            max-height: calc(100vw * 1.55); 
+            aspect-ratio: 2 / 3.2; 
+            background-color: var(--pitch-bg);
+            background-image: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, rgba(0,0,0,0.05) 100%);
+            border: 2px solid var(--pitch-lines);
+            border-radius: 4px;
+            position: relative;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+            touch-action: none;
+            transition: transform 0.5s ease-in-out; 
+            margin: auto;
+        }
+
+        .pitch.flipped { transform: rotate(180deg); }
+
+        .pitch::before { content: ''; position: absolute; top: 50%; left: 0; width: 100%; height: 2px; background: var(--pitch-lines); transform: translateY(-50%); }
+        .center-circle, .center-dot, .penalty-box-top, .penalty-box-bottom, .goal-box-top, .goal-box-bottom { position: absolute; border: 2px solid var(--pitch-lines); }
+        .center-circle { top: 50%; left: 50%; width: 30%; aspect-ratio: 1; border-radius: 50%; transform: translate(-50%, -50%); }
+        .center-dot { top: 50%; left: 50%; width: 6px; height: 6px; background: var(--pitch-lines); border-radius: 50%; transform: translate(-50%, -50%); }
+        .penalty-box-top { width: 60%; height: 16%; left: 20%; top: 0; border-top: none; }
+        .penalty-box-bottom { width: 60%; height: 16%; left: 20%; bottom: 0; border-bottom: none; }
+        .goal-box-top { width: 30%; height: 6%; left: 35%; top: 0; border-top: none; }
+        .goal-box-bottom { width: 30%; height: 6%; left: 35%; bottom: 0; border-bottom: none; }
+
+        #arrows-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+
+        /* Tactical Chips (Magnets) */
+        .magnet {
+            position: absolute;
+            transform: translate(-50%, -50%) rotate(0deg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px; 
+            letter-spacing: -0.2px;
+            font-weight: 700;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+            cursor: grab;
+            /* Removed the 'left' and 'top' transitions to restore fluid 1-to-1 drag feel */
+            transition: box-shadow 0.2s, transform 0.5s ease-in-out;
+        }
+
+        .magnet:active {
+            cursor: grabbing;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.7);
+            transform: translate(-50%, -50%) scale(1.2) rotate(0deg);
+        }
+
+        .pitch.flipped .magnet { transform: translate(-50%, -50%) rotate(-180deg); }
+        .pitch.flipped .magnet:active { transform: translate(-50%, -50%) rotate(-180deg) scale(1.2); }
+
+        .magnet.home, .magnet.opp { width: 26px; height: 26px; border: 2px solid #ffffff; border-radius: 50%; z-index: 2; }
+        .magnet.home { background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%); color: white; }
+        .magnet.opp { background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: white; }
+        
+        .magnet.ball {
+            width: 16px; height: 16px; background-color: var(--ball-bg); border: 2px solid #111; 
+            border-radius: 50%; z-index: 3; box-shadow: 0 3px 6px rgba(0,0,0,0.5); font-size: 0; 
+        }
+        .magnet.ball::after { content: ''; width: 4px; height: 4px; background: #111; border-radius: 50%; }
+
+        .no-transition { transition: none !important; }
+        .is-resetting { transition: left 0.4s ease, top 0.4s ease, transform 0.5s ease-in-out !important; }
+
+        /* --- BOTTOM UI PANEL --- */
+        .bottom-panel {
+            background-color: var(--bg-panel);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 24px 24px 0 0;
+            padding: 16px 12px;
+            padding-bottom: max(16px, env(safe-area-inset-bottom));
+            display: flex;
+            flex-direction: column;
+            z-index: 10;
+            box-shadow: 0 -10px 25px rgba(0,0,0,0.5);
+        }
+
+        .tab-header { 
+            display: flex; 
+            background-color: var(--bg-base);
+            border: 1px solid var(--bg-card);
+            border-radius: 999px;
+            padding: 4px;
+            margin-bottom: 14px;
+        }
+        
+        .tab-btn {
+            flex: 1; padding: 10px 0; text-align: center; color: var(--text-muted); 
+            font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 999px; transition: all 0.2s ease;
+        }
+        
+        .tab-btn.active { background-color: var(--bg-card); color: var(--text-main); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+
+        /* Locked height to prevent pitch shifting when swapping tabs */
+        .tab-content { 
+            display: none; 
+            flex-direction: column; 
+            gap: 10px; 
+            min-height: 106px; /* 48px + 10px gap + 48px = 106px exact height of 2 rows */
+        }
+        .tab-content.active { display: flex; }
+
+        .form-row { display: flex; gap: 8px; width: 100%; }
+
+        select, button {
+            background-color: var(--bg-card); color: var(--text-main); border: 1px solid rgba(255,255,255,0.08); 
+            height: 48px; border-radius: 12px; font-size: 14px; font-weight: 600; font-family: inherit;
+            flex: 1; outline: none; appearance: none; -webkit-appearance: none; padding: 0 16px;
+            display: flex; justify-content: center; align-items: center; white-space: nowrap;
+        }
+
+        select { 
+            background-image: url('data:image/svg+xml;utf8,<svg fill="%23a1a1aa" height="20" viewBox="0 0 24 24" width="20" xmlns="http://www.w3.org/2000/svg"><path d="M7 10l5 5 5-5z"/></svg>'); 
+            background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; 
+        }
+
+        button { cursor: pointer; transition: background 0.1s; }
+        button:active { background-color: var(--bg-card-hover); }
+
+        optgroup { background: #18181b; color: #a1a1aa; font-style: normal; font-weight: bold; }
+        option { background: #27272a; color: white; }
+
+        .btn-icon { flex: 0 0 48px; width: 48px; padding: 0; font-size: 18px; } 
+        
+        #home-formation-select { border-left: 3px solid var(--home-bg); }
+        #opp-formation-select { border-left: 3px solid var(--opp-bg); }
+        
+        #mode-toggle { border: 1px solid var(--text-muted); color: var(--text-muted); }
+        #mode-toggle.mode-moves { background-color: rgba(59, 130, 246, 0.15); color: var(--accent-primary); border: 1px solid var(--accent-primary); }
+        
+        #export-btn { background-color: var(--bg-card); color: var(--text-main); }
+        #reset-moves { background-color: var(--bg-card); color: var(--text-main); }
+        #reset-formation { background-color: rgba(239, 68, 68, 0.1); color: #f87171; border-color: rgba(239, 68, 68, 0.3); }
+    </style>
+</head>
+<body>
+
+    <div class="pitch-wrapper">
+        <div class="pitch" id="pitch">
+            <div class="center-circle"></div>
+            <div class="center-dot"></div>
+            <div class="penalty-box-top"></div>
+            <div class="goal-box-top"></div>
+            <div class="penalty-box-bottom"></div>
+            <div class="goal-box-bottom"></div>
+
+            <svg id="arrows-overlay">
+                <defs>
+                    <marker id="arrowhead-home" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><polygon points="0 0, 6 3, 0 6" fill="var(--home-arrow)" /></marker>
+                    <marker id="arrowhead-opp" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><polygon points="0 0, 6 3, 0 6" fill="var(--opp-arrow)" /></marker>
+                    <marker id="arrowhead-ball" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><polygon points="0 0, 6 3, 0 6" fill="var(--ball-arrow)" /></marker>
+                </defs>
+            </svg>
+        </div>
+    </div>
+
+    <div class="bottom-panel">
+        
+        <div class="tab-header">
+            <div class="tab-btn active" data-tab="teams">Squads</div>
+            <div class="tab-btn" data-tab="scenarios">Tactics</div>
+            <div class="tab-btn" data-tab="actions">Actions</div>
+        </div>
+
+        <!-- Tab 1: Teams & Formations -->
+        <div class="tab-content active" id="tab-teams">
+            <div class="form-row">
+                <select id="config-select" style="flex: 1;">
+                    <option value="11v11">11 v 11</option>
+                    <option value="9v9" selected>9 v 9</option>
+                </select>
+                <select id="label-mode-select" style="flex: 1;">
+                    <option value="positions">Show Roles</option>
+                    <option value="numbers">Show Numbers</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <select id="home-formation-select"></select>
+                <select id="opp-formation-select"></select>
+            </div>
+        </div>
+
+        <!-- Tab 2: Scenarios -->
+        <div class="tab-content" id="tab-scenarios">
+            <div class="form-row">
+                <select id="scenario-select" style="border-color: rgba(59, 130, 246, 0.4);">
+                    <option value="">-- Select Template --</option>
+                    <optgroup label="Red Team">
+                        <option value="red-attack-left">Left-Sided Overload</option>
+                        <option value="red-counter-mid">Middle Counter</option>
+                        <option value="red-freekick">Attacking Free Kick</option>
+                        <option value="red-high-press">High Press</option>
+                        <option value="red-defend-corner">Defend Corner</option>
+                    </optgroup>
+                    <optgroup label="Blue Team">
+                        <option value="blue-breakaway">Fast Breakaway</option>
+                        <option value="blue-overlap-right">Right Overlap</option>
+                        <option value="blue-buildup">Goal Kick Build Up</option>
+                        <option value="blue-low-block">Low Block</option>
+                        <option value="blue-defend-fk">Defend Wide FK</option>
+                    </optgroup>
+                </select>
+            </div>
+        </div>
+
+        <!-- Tab 3: Actions & Controls -->
+        <div class="tab-content" id="tab-actions">
+            <div class="form-row">
+                <button id="mode-toggle" class="mode-setup">✏️ Draw Moves: OFF</button>
+                <button id="export-btn">📸 Export Seq.</button>
+            </div>
+            <div class="form-row">
+                <button id="flip-board" class="btn-icon">🔃</button>
+                <button id="reset-moves">⏪ Tracers</button>
+                <button id="reset-formation">🔄 Reset</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- 1. CONFIG & DATA ---
+        const formations = {
+            "11v11": {
+                "4-4-2": [{x:50,y:92,r:'GK'}, {x:15,y:75,r:'LB'}, {x:35,y:78,r:'CB'}, {x:65,y:78,r:'CB'}, {x:85,y:75,r:'RB'}, {x:15,y:50,r:'LM'}, {x:35,y:52,r:'CM'}, {x:65,y:52,r:'CM'}, {x:85,y:50,r:'RM'}, {x:35,y:25,r:'CF'}, {x:65,y:25,r:'ST'}],
+                "4-3-3": [{x:50,y:92,r:'GK'}, {x:15,y:75,r:'LB'}, {x:35,y:78,r:'CB'}, {x:65,y:78,r:'CB'}, {x:85,y:75,r:'RB'}, {x:30,y:52,r:'CM'}, {x:50,y:62,r:'CDM'}, {x:70,y:52,r:'CM'}, {x:20,y:25,r:'LW'}, {x:50,y:20,r:'ST'}, {x:80,y:25,r:'RW'}],
+                "3-5-2": [{x:50,y:92,r:'GK'}, {x:25,y:78,r:'CB'}, {x:50,y:80,r:'CB'}, {x:75,y:78,r:'CB'}, {x:15,y:50,r:'LWB'}, {x:35,y:55,r:'CM'}, {x:50,y:65,r:'CDM'}, {x:65,y:55,r:'CM'}, {x:85,y:50,r:'RWB'}, {x:35,y:25,r:'CF'}, {x:65,y:25,r:'ST'}]
+            },
+            "9v9": {
+                "3-2-3": [{x:50,y:92,r:'GK'}, {x:25,y:78,r:'CB'}, {x:50,y:80,r:'CB'}, {x:75,y:78,r:'CB'}, {x:35,y:55,r:'CM'}, {x:65,y:55,r:'CM'}, {x:20,y:30,r:'LW'}, {x:50,y:25,r:'ST'}, {x:80,y:30,r:'RW'}],
+                "2-4-2": [{x:50,y:92,r:'GK'}, {x:35,y:78,r:'CB'}, {x:65,y:78,r:'CB'}, {x:15,y:52,r:'LM'}, {x:35,y:55,r:'CM'}, {x:65,y:55,r:'CM'}, {x:85,y:52,r:'RM'}, {x:35,y:28,r:'CF'}, {x:65,y:28,r:'ST'}]
+            }
+        };
+
+        const scenarios = {
+            "red-attack-left": { 
+                "11v11": { home: [{x:50,y:92,r:'GK'}, {x:30,y:60,r:'LB'}, {x:50,y:65,r:'CB'}, {x:70,y:65,r:'CB'}, {x:85,y:55,r:'RB'}, {x:40,y:40,r:'CM'}, {x:65,y:40,r:'CM'}, {x:12,y:15,r:'LW'}, {x:80,y:25,r:'RW'}, {x:40,y:12,r:'CF'}, {x:55,y:16,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:15,y:15,r:'RB'}, {x:35,y:12,r:'CB'}, {x:50,y:15,r:'CB'}, {x:65,y:20,r:'LB'}, {x:25,y:25,r:'RM'}, {x:45,y:25,r:'CM'}, {x:60,y:30,r:'CM'}, {x:30,y:50,r:'RW'}, {x:70,y:45,r:'LW'}, {x:50,y:40,r:'ST'}], ball: {x:14,y:17} },
+                "9v9": { home: [{x:50,y:92,r:'GK'}, {x:30,y:60,r:'LB'}, {x:50,y:65,r:'CB'}, {x:75,y:60,r:'RB'}, {x:40,y:40,r:'CM'}, {x:65,y:40,r:'CM'}, {x:12,y:15,r:'LW'}, {x:80,y:25,r:'RW'}, {x:45,y:15,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:20,y:15,r:'RB'}, {x:45,y:15,r:'CB'}, {x:65,y:20,r:'LB'}, {x:25,y:25,r:'RM'}, {x:50,y:25,r:'CM'}, {x:70,y:30,r:'LM'}, {x:30,y:50,r:'RW'}, {x:55,y:40,r:'ST'}], ball: {x:14,y:17} }
+            },
+            "red-counter-mid": { 
+                "11v11": { home: [{x:50,y:92,r:'GK'}, {x:25,y:75,r:'LB'}, {x:50,y:80,r:'CB'}, {x:75,y:75,r:'RB'}, {x:35,y:65,r:'CM'}, {x:65,y:65,r:'CM'}, {x:50,y:55,r:'CAM'}, {x:25,y:35,r:'LW'}, {x:50,y:40,r:'ST'}, {x:75,y:35,r:'RW'}, {x:50,y:30,r:'CF'}], opp: [{x:50,y:8,r:'GK'}, {x:20,y:45,r:'RB'}, {x:40,y:50,r:'CB'}, {x:60,y:50,r:'CB'}, {x:80,y:45,r:'LB'}, {x:30,y:55,r:'CDM'}, {x:70,y:55,r:'CDM'}, {x:50,y:65,r:'CAM'}, {x:20,y:75,r:'RW'}, {x:50,y:75,r:'ST'}, {x:80,y:75,r:'LW'}], ball: {x:50,y:45} },
+                "9v9": { home: [{x:50,y:92,r:'GK'}, {x:25,y:75,r:'LB'}, {x:50,y:80,r:'CB'}, {x:75,y:75,r:'RB'}, {x:40,y:65,r:'CM'}, {x:60,y:65,r:'CM'}, {x:50,y:55,r:'CAM'}, {x:30,y:35,r:'LW'}, {x:50,y:35,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:30,y:45,r:'RB'}, {x:50,y:50,r:'CB'}, {x:70,y:45,r:'LB'}, {x:50,y:55,r:'CDM'}, {x:35,y:65,r:'CM'}, {x:65,y:65,r:'CM'}, {x:25,y:75,r:'RW'}, {x:50,y:75,r:'ST'}], ball: {x:50,y:45} }
+            },
+            "red-freekick": { 
+                "11v11": { home: [{x:50,y:90,r:'GK'}, {x:20,y:50,r:'LB'}, {x:40,y:55,r:'CB'}, {x:60,y:55,r:'CB'}, {x:80,y:50,r:'RB'}, {x:30,y:35,r:'LM'}, {x:70,y:35,r:'RM'}, {x:50,y:28,r:'CM'}, {x:40,y:20,r:'CF'}, {x:50,y:16,r:'CAM'}, {x:60,y:20,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:38,y:18,r:'RB'}, {x:46,y:18,r:'CB'}, {x:54,y:18,r:'CB'}, {x:62,y:18,r:'LB'}, {x:20,y:25,r:'RM'}, {x:80,y:25,r:'LM'}, {x:40,y:25,r:'CM'}, {x:60,y:25,r:'CM'}, {x:50,y:45,r:'CAM'}, {x:50,y:60,r:'ST'}], ball: {x:50,y:26} },
+                "9v9": { home: [{x:50,y:90,r:'GK'}, {x:25,y:50,r:'LB'}, {x:50,y:55,r:'CB'}, {x:75,y:50,r:'RB'}, {x:30,y:35,r:'LM'}, {x:70,y:35,r:'RM'}, {x:50,y:28,r:'CM'}, {x:50,y:16,r:'CAM'}, {x:40,y:20,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:38,y:18,r:'RB'}, {x:50,y:18,r:'CB'}, {x:62,y:18,r:'LB'}, {x:25,y:25,r:'RM'}, {x:45,y:25,r:'CM'}, {x:65,y:25,r:'LM'}, {x:50,y:45,r:'CAM'}, {x:50,y:60,r:'ST'}], ball: {x:50,y:26} }
+            },
+            "red-high-press": { 
+                "11v11": { home: [{x:50,y:90,r:'GK'}, {x:25,y:60,r:'LB'}, {x:50,y:65,r:'CB'}, {x:75,y:60,r:'RB'}, {x:30,y:40,r:'LM'}, {x:50,y:45,r:'CM'}, {x:70,y:40,r:'RM'}, {x:25,y:18,r:'LW'}, {x:75,y:18,r:'RW'}, {x:40,y:22,r:'CF'}, {x:60,y:22,r:'ST'}], opp: [{x:50,y:5,r:'GK'}, {x:15,y:15,r:'RB'}, {x:35,y:10,r:'CB'}, {x:65,y:10,r:'CB'}, {x:85,y:15,r:'LB'}, {x:30,y:25,r:'CDM'}, {x:50,y:22,r:'CM'}, {x:70,y:25,r:'CDM'}, {x:20,y:45,r:'RW'}, {x:50,y:40,r:'CAM'}, {x:80,y:45,r:'LW'}], ball: {x:50,y:6} },
+                "9v9": { home: [{x:50,y:90,r:'GK'}, {x:30,y:60,r:'CB'}, {x:50,y:65,r:'CB'}, {x:70,y:60,r:'CB'}, {x:30,y:40,r:'LM'}, {x:50,y:45,r:'CM'}, {x:70,y:40,r:'RM'}, {x:25,y:18,r:'LW'}, {x:50,y:20,r:'ST'}], opp: [{x:50,y:5,r:'GK'}, {x:20,y:15,r:'RB'}, {x:50,y:10,r:'CB'}, {x:80,y:15,r:'LB'}, {x:35,y:25,r:'CDM'}, {x:65,y:25,r:'CDM'}, {x:20,y:45,r:'RW'}, {x:50,y:40,r:'CAM'}, {x:80,y:45,r:'LW'}], ball: {x:50,y:6} }
+            },
+            "red-defend-corner": { 
+                "11v11": { home: [{x:50,y:96,r:'GK'}, {x:42,y:92,r:'LB'}, {x:50,y:90,r:'CB'}, {x:58,y:92,r:'CB'}, {x:35,y:84,r:'RB'}, {x:50,y:82,r:'CDM'}, {x:65,y:84,r:'CM'}, {x:30,y:88,r:'LM'}, {x:70,y:88,r:'RM'}, {x:50,y:68,r:'CAM'}, {x:50,y:45,r:'ST'}], opp: [{x:50,y:15,r:'GK'}, {x:35,y:45,r:'RB'}, {x:65,y:45,r:'LB'}, {x:50,y:72,r:'CDM'}, {x:38,y:80,r:'CB'}, {x:48,y:78,r:'CB'}, {x:58,y:78,r:'CM'}, {x:68,y:80,r:'CM'}, {x:42,y:88,r:'RW'}, {x:58,y:88,r:'LW'}, {x:97,y:97,r:'ST'}], ball: {x:95,y:95} },
+                "9v9": { home: [{x:50,y:96,r:'GK'}, {x:42,y:92,r:'LB'}, {x:50,y:90,r:'CB'}, {x:58,y:92,r:'RB'}, {x:50,y:82,r:'CDM'}, {x:65,y:84,r:'CM'}, {x:30,y:88,r:'LM'}, {x:70,y:88,r:'RM'}, {x:50,y:50,r:'ST'}], opp: [{x:50,y:15,r:'GK'}, {x:35,y:45,r:'RB'}, {x:65,y:45,r:'LB'}, {x:45,y:80,r:'CB'}, {x:55,y:80,r:'CB'}, {x:65,y:78,r:'CM'}, {x:42,y:88,r:'RW'}, {x:58,y:88,r:'LW'}, {x:97,y:97,r:'ST'}], ball: {x:95,y:95} }
+            },
+            
+            "blue-breakaway": { 
+                "11v11": { home: [{x:50,y:92,r:'GK'}, {x:35,y:75,r:'CB'}, {x:65,y:75,r:'CB'}, {x:15,y:45,r:'LB'}, {x:85,y:45,r:'RB'}, {x:40,y:50,r:'CM'}, {x:60,y:50,r:'CM'}, {x:20,y:25,r:'LW'}, {x:80,y:25,r:'RW'}, {x:40,y:20,r:'CF'}, {x:60,y:20,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:20,y:25,r:'RB'}, {x:40,y:25,r:'CB'}, {x:60,y:25,r:'CB'}, {x:80,y:25,r:'LB'}, {x:30,y:40,r:'CM'}, {x:70,y:40,r:'CM'}, {x:50,y:55,r:'CAM'}, {x:25,y:65,r:'RW'}, {x:75,y:65,r:'LW'}, {x:50,y:72,r:'ST'}], ball: {x:50,y:58} },
+                "9v9": { home: [{x:50,y:92,r:'GK'}, {x:35,y:75,r:'CB'}, {x:65,y:75,r:'CB'}, {x:15,y:45,r:'LB'}, {x:85,y:45,r:'RB'}, {x:40,y:50,r:'CM'}, {x:60,y:50,r:'CM'}, {x:25,y:25,r:'LW'}, {x:50,y:20,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:25,y:25,r:'RB'}, {x:50,y:25,r:'CB'}, {x:75,y:25,r:'LB'}, {x:35,y:40,r:'CM'}, {x:65,y:40,r:'CM'}, {x:50,y:55,r:'CAM'}, {x:25,y:65,r:'RW'}, {x:50,y:72,r:'ST'}], ball: {x:50,y:58} }
+            },
+            "blue-overlap-right": { 
+                "11v11": { home: [{x:50,y:92,r:'GK'}, {x:20,y:85,r:'LB'}, {x:40,y:85,r:'CB'}, {x:55,y:85,r:'CB'}, {x:80,y:75,r:'RB'}, {x:30,y:70,r:'LM'}, {x:50,y:75,r:'CM'}, {x:70,y:75,r:'RM'}, {x:30,y:50,r:'LW'}, {x:70,y:50,r:'RW'}, {x:50,y:40,r:'ST'}], opp: [{x:50,y:15,r:'GK'}, {x:25,y:35,r:'RB'}, {x:45,y:30,r:'CB'}, {x:65,y:30,r:'CB'}, {x:85,y:60,r:'LB'}, {x:35,y:50,r:'CDM'}, {x:55,y:45,r:'CM'}, {x:75,y:55,r:'CDM'}, {x:25,y:65,r:'RW'}, {x:50,y:65,r:'ST'}, {x:88,y:85,r:'LW'}], ball: {x:85,y:80} },
+                "9v9": { home: [{x:50,y:92,r:'GK'}, {x:20,y:85,r:'LB'}, {x:50,y:85,r:'CB'}, {x:80,y:75,r:'RB'}, {x:30,y:70,r:'LM'}, {x:50,y:75,r:'CM'}, {x:70,y:75,r:'RM'}, {x:35,y:50,r:'LW'}, {x:50,y:45,r:'ST'}], opp: [{x:50,y:15,r:'GK'}, {x:30,y:35,r:'RB'}, {x:50,y:30,r:'CB'}, {x:80,y:60,r:'LB'}, {x:45,y:50,r:'CDM'}, {x:65,y:45,r:'CM'}, {x:25,y:65,r:'RW'}, {x:50,y:65,r:'ST'}, {x:88,y:85,r:'LW'}], ball: {x:85,y:80} }
+            },
+            "blue-buildup": { 
+                "11v11": { home: [{x:50,y:90,r:'GK'}, {x:25,y:60,r:'LB'}, {x:50,y:65,r:'CB'}, {x:75,y:60,r:'RB'}, {x:30,y:45,r:'LM'}, {x:50,y:40,r:'CM'}, {x:70,y:45,r:'RM'}, {x:25,y:25,r:'CF'}, {x:75,y:25,r:'ST'}, {x:40,y:30,r:'CAM'}, {x:60,y:30,r:'ST'}], opp: [{x:50,y:5,r:'GK'}, {x:20,y:15,r:'RB'}, {x:35,y:12,r:'CB'}, {x:65,y:12,r:'CB'}, {x:80,y:15,r:'LB'}, {x:40,y:25,r:'CDM'}, {x:60,y:25,r:'CDM'}, {x:50,y:35,r:'CAM'}, {x:20,y:45,r:'RW'}, {x:50,y:50,r:'ST'}, {x:80,y:45,r:'LW'}], ball: {x:50,y:8} },
+                "9v9": { home: [{x:50,y:90,r:'GK'}, {x:25,y:60,r:'LB'}, {x:50,y:65,r:'CB'}, {x:75,y:60,r:'RB'}, {x:30,y:45,r:'LM'}, {x:50,y:40,r:'CM'}, {x:70,y:45,r:'RM'}, {x:40,y:30,r:'CAM'}, {x:60,y:30,r:'ST'}], opp: [{x:50,y:5,r:'GK'}, {x:20,y:15,r:'RB'}, {x:50,y:12,r:'CB'}, {x:80,y:15,r:'LB'}, {x:50,y:25,r:'CDM'}, {x:50,y:35,r:'CAM'}, {x:20,y:45,r:'RW'}, {x:50,y:50,r:'ST'}, {x:80,y:45,r:'LW'}], ball: {x:50,y:8} }
+            },
+            "blue-low-block": { 
+                "11v11": { home: [{x:50,y:85,r:'GK'}, {x:20,y:60,r:'LB'}, {x:40,y:65,r:'CB'}, {x:60,y:65,r:'CB'}, {x:80,y:60,r:'RB'}, {x:25,y:40,r:'LM'}, {x:50,y:40,r:'CM'}, {x:75,y:40,r:'RM'}, {x:30,y:30,r:'CF'}, {x:50,y:25,r:'CAM'}, {x:70,y:30,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:20,y:15,r:'RB'}, {x:35,y:12,r:'CB'}, {x:50,y:12,r:'CB'}, {x:65,y:12,r:'CB'}, {x:80,y:15,r:'LB'}, {x:30,y:22,r:'CDM'}, {x:50,y:20,r:'CM'}, {x:70,y:22,r:'CDM'}, {x:40,y:28,r:'RW'}, {x:60,y:28,r:'LW'}], ball: {x:50,y:28} },
+                "9v9": { home: [{x:50,y:85,r:'GK'}, {x:25,y:60,r:'LB'}, {x:50,y:65,r:'CB'}, {x:75,y:60,r:'RB'}, {x:25,y:40,r:'LM'}, {x:50,y:40,r:'CM'}, {x:75,y:40,r:'RM'}, {x:50,y:30,r:'CAM'}, {x:50,y:25,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:25,y:15,r:'RB'}, {x:50,y:12,r:'CB'}, {x:75,y:15,r:'LB'}, {x:35,y:22,r:'CDM'}, {x:65,y:22,r:'CDM'}, {x:25,y:30,r:'RW'}, {x:50,y:35,r:'ST'}, {x:75,y:30,r:'LW'}], ball: {x:50,y:28} }
+            },
+            "blue-defend-fk": { 
+                "11v11": { home: [{x:50,y:80,r:'GK'}, {x:30,y:55,r:'LB'}, {x:50,y:60,r:'CB'}, {x:70,y:55,r:'RB'}, {x:40,y:45,r:'CDM'}, {x:60,y:45,r:'CDM'}, {x:15,y:35,r:'LM'}, {x:35,y:20,r:'CAM'}, {x:45,y:18,r:'RM'}, {x:55,y:18,r:'CF'}, {x:65,y:20,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:25,y:16,r:'RB'}, {x:40,y:15,r:'CB'}, {x:55,y:15,r:'CB'}, {x:70,y:16,r:'LB'}, {x:20,y:25,r:'RM'}, {x:30,y:22,r:'CM'}, {x:50,y:22,r:'CM'}, {x:65,y:25,r:'LM'}, {x:40,y:45,r:'ST'}, {x:60,y:45,r:'ST'}], ball: {x:16,y:33} },
+                "9v9": { home: [{x:50,y:80,r:'GK'}, {x:35,y:55,r:'LB'}, {x:50,y:60,r:'CB'}, {x:65,y:55,r:'RB'}, {x:50,y:45,r:'CDM'}, {x:20,y:35,r:'LM'}, {x:45,y:18,r:'RM'}, {x:35,y:20,r:'CAM'}, {x:55,y:18,r:'ST'}], opp: [{x:50,y:8,r:'GK'}, {x:30,y:16,r:'RB'}, {x:50,y:15,r:'CB'}, {x:70,y:16,r:'LB'}, {x:25,y:25,r:'RM'}, {x:45,y:25,r:'CM'}, {x:65,y:25,r:'LM'}, {x:40,y:45,r:'ST'}, {x:60,y:45,r:'ST'}], ball: {x:16,y:33} }
+            }
+        };
+
+        // --- 2. DOM ELEMENTS ---
+        const configSelect = document.getElementById('config-select');
+        const labelModeSelect = document.getElementById('label-mode-select');
+        const homeFormSelect = document.getElementById('home-formation-select');
+        const oppFormSelect = document.getElementById('opp-formation-select');
+        const scenarioSelect = document.getElementById('scenario-select');
+        const modeToggleBtn = document.getElementById('mode-toggle');
+        const exportBtn = document.getElementById('export-btn');
+        const flipBtn = document.getElementById('flip-board');
+        const resetMovesBtn = document.getElementById('reset-moves');
+        const resetFormBtn = document.getElementById('reset-formation');
+        const pitch = document.getElementById('pitch');
+        const arrowsOverlay = document.getElementById('arrows-overlay');
+        
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        let magnets = [];
+        let activeMagnet = null;
+        let isSetupMode = true;
+        let isFlipped = false;
+        let labelMode = 'positions';
+
+        // --- 3. UI TAB LOGIC ---
+        function switchTab(tabId) {
+            tabBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
+            tabContents.forEach(content => content.classList.toggle('active', content.id === `tab-${tabId}`));
+        }
+        tabBtns.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
+
+        // --- 4. BOARD LOGIC ---
+        function init() {
+            labelMode = labelModeSelect.value;
+            updateFormationDropdowns();
+            loadBoard();
+            setupEventListeners();
+        }
+
+        function updateFormationDropdowns() {
+            const config = configSelect.value;
+            homeFormSelect.innerHTML = ''; oppFormSelect.innerHTML = '';
+            for (let form in formations[config]) {
+                homeFormSelect.appendChild(new Option(`Red: ${form}`, form));
+                oppFormSelect.appendChild(new Option(`Blue: ${form}`, form));
+            }
+        }
+
+        function updateAllLabels() {
+            document.querySelectorAll('.magnet.home, .magnet.opp').forEach(el => {
+                el.textContent = labelMode === 'numbers' ? el.dataset.num : el.dataset.role;
+            });
+        }
+
+        function createMagnet(type, id, startX, startY, numLabel, roleLabel) {
+            const el = document.createElement('div');
+            el.className = `magnet ${type} is-resetting`;
+            
+            el.style.left = `${startX}%`; el.style.top = `${startY}%`;
+            el.dataset.id = id;
+            el.dataset.startX = startX; el.dataset.startY = startY;
+            el.dataset.currX = startX; el.dataset.currY = startY;
+
+            if (type !== 'ball') {
+                el.dataset.num = numLabel;
+                el.dataset.role = roleLabel || numLabel;
+                el.textContent = labelMode === 'numbers' ? numLabel : el.dataset.role;
+            }
+
+            pitch.appendChild(el);
+            magnets.push(el);
+
+            const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            line.setAttribute('id', `line-${id}`);
+            
+            let color = 'var(--ball-arrow)'; let marker = 'arrowhead-ball';
+            if (type === 'home') { color = 'var(--home-arrow)'; marker = 'arrowhead-home'; }
+            if (type === 'opp') { color = 'var(--opp-arrow)'; marker = 'arrowhead-opp'; }
+
+            line.setAttribute('stroke', color);
+            line.setAttribute('stroke-width', type === 'ball' ? '3' : '2');
+            line.setAttribute('stroke-dasharray', type === 'ball' ? '6,6' : '4,4');
+            line.setAttribute('marker-end', `url(#${marker})`);
+            line.setAttribute('x1', `${startX}%`); line.setAttribute('y1', `${startY}%`);
+            line.setAttribute('x2', `${startX}%`); line.setAttribute('y2', `${startY}%`);
+            line.style.opacity = '0';
+            
+            arrowsOverlay.appendChild(line);
+            setTimeout(() => el.classList.remove('is-resetting'), 400);
+        }
+
+        function loadBoard() {
+            setSetupMode(true); 
+            document.querySelectorAll('.magnet, line').forEach(el => el.remove());
+            magnets = [];
+
+            const scenarioId = scenarioSelect.value;
+            const config = configSelect.value; 
+
+            if (scenarioId && scenarios[scenarioId] && scenarios[scenarioId][config]) {
+                const s = scenarios[scenarioId][config];
+                s.home.forEach((pos, index) => createMagnet('home', `home-${index}`, pos.x, pos.y, index + 1, pos.r));
+                s.opp.forEach((pos, index) => createMagnet('opp', `opp-${index}`, pos.x, pos.y, index + 1, pos.r)); 
+                createMagnet('ball', 'football', s.ball.x, s.ball.y, '', '');
+            } else {
+                const homePositions = formations[config][homeFormSelect.value];
+                const oppPositions = formations[config][oppFormSelect.value];
+                homePositions.forEach((pos, index) => createMagnet('home', `home-${index}`, pos.x, pos.y, index + 1, pos.r));
+                oppPositions.forEach((pos, index) => createMagnet('opp', `opp-${index}`, 100 - pos.x, 100 - pos.y, index + 1, pos.r));
+                createMagnet('ball', 'football', 50, 50, '', '');
+            }
+        }
+
+        function setSetupMode(setup) {
+            isSetupMode = setup;
+            if (isSetupMode) {
+                modeToggleBtn.textContent = "✏️ Draw Moves: OFF";
+                modeToggleBtn.classList.remove("mode-moves");
+                resetMoves(); 
+            } else {
+                modeToggleBtn.textContent = "✏️ Draw Moves: ON";
+                modeToggleBtn.classList.add("mode-moves");
+            }
+        }
+
+        function resetMoves() {
+            magnets.forEach(m => {
+                m.classList.add('is-resetting');
+                m.style.left = `${m.dataset.startX}%`; m.style.top = `${m.dataset.startY}%`;
+                m.dataset.currX = m.dataset.startX; m.dataset.currY = m.dataset.startY;
+
+                const line = document.getElementById(`line-${m.dataset.id}`);
+                line.style.opacity = '0';
+                line.setAttribute('x2', `${m.dataset.startX}%`);
+                line.setAttribute('y2', `${m.dataset.startY}%`);
+                setTimeout(() => m.classList.remove('is-resetting'), 400);
+            });
+        }
+
+        // --- 5. EXPORT SEQUENCE ---
+        async function exportSequence() {
+            exportBtn.innerHTML = "⏳ Exporting...";
+            exportBtn.disabled = true;
+
+            magnets.forEach(m => m.classList.add('no-transition'));
+
+            // Frame 1
+            magnets.forEach(m => {
+                m.style.left = `${m.dataset.startX}%`;
+                m.style.top = `${m.dataset.startY}%`;
+                document.getElementById(`line-${m.dataset.id}`).style.opacity = '0';
+            });
+            await new Promise(r => setTimeout(r, 150)); 
+            const canvas1 = await html2canvas(pitch, { backgroundColor: '#1b4d2e', scale: 2 });
+
+            // Frame 2
+            magnets.forEach(m => {
+                m.style.left = `${m.dataset.currX}%`;
+                m.style.top = `${m.dataset.currY}%`;
+                updateArrow(m);
+            });
+            await new Promise(r => setTimeout(r, 150)); 
+            const canvas2 = await html2canvas(pitch, { backgroundColor: '#1b4d2e', scale: 2 });
+
+            magnets.forEach(m => m.classList.remove('no-transition'));
+
+            // Stitch
+            const padding = 40;
+            const textHeight = 80;
+            const width = (canvas1.width * 2) + (padding * 3);
+            const height = canvas1.height + (padding * 2) + textHeight;
+
+            const finalCanvas = document.createElement('canvas');
+            finalCanvas.width = width;
+            finalCanvas.height = height;
+            const ctx = finalCanvas.getContext('2d');
+
+            ctx.fillStyle = '#09090b'; 
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = '#f8fafc';
+            ctx.font = 'bold 44px "Inter", -apple-system, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("1. The Scenario", padding + (canvas1.width / 2), padding + 40);
+            ctx.fillText("2. The Solution", (padding * 2) + canvas1.width + (canvas2.width / 2), padding + 40);
+
+            ctx.drawImage(canvas1, padding, padding + textHeight);
+            ctx.drawImage(canvas2, (padding * 2) + canvas1.width, padding + textHeight);
+
+            const link = document.createElement('a');
+            link.download = `Tactics-Export-${Date.now()}.png`;
+            link.href = finalCanvas.toDataURL('image/png');
+            link.click();
+
+            exportBtn.innerHTML = "📸 Export Seq.";
+            exportBtn.disabled = false;
+        }
+
+        // --- 6. EVENT LISTENERS ---
+        function setupEventListeners() {
+            labelModeSelect.addEventListener('change', (e) => { labelMode = e.target.value; updateAllLabels(); });
+            configSelect.addEventListener('change', () => { updateFormationDropdowns(); loadBoard(); });
+            homeFormSelect.addEventListener('change', () => { scenarioSelect.value = ""; loadBoard(); });
+            oppFormSelect.addEventListener('change', () => { scenarioSelect.value = ""; loadBoard(); });
+            
+            scenarioSelect.addEventListener('change', () => {
+                if(scenarioSelect.value !== "") switchTab('actions'); 
+                loadBoard();
+            });
+            
+            resetFormBtn.addEventListener('click', loadBoard);
+            resetMovesBtn.addEventListener('click', resetMoves);
+            modeToggleBtn.addEventListener('click', () => setSetupMode(!isSetupMode));
+            exportBtn.addEventListener('click', exportSequence);
+
+            flipBtn.addEventListener('click', () => {
+                isFlipped = !isFlipped;
+                pitch.classList.toggle('flipped', isFlipped);
+            });
+
+            pitch.addEventListener('pointerdown', (e) => {
+                if (e.target.classList.contains('magnet')) {
+                    activeMagnet = e.target;
+                    activeMagnet.setPointerCapture(e.pointerId);
+                }
+            });
+
+            pitch.addEventListener('pointermove', (e) => {
+                if (!activeMagnet) return;
+                const rect = pitch.getBoundingClientRect();
+                let rawX = ((e.clientX - rect.left) / rect.width) * 100;
+                let rawY = ((e.clientY - rect.top) / rect.height) * 100;
+                let x = isFlipped ? 100 - rawX : rawX;
+                let y = isFlipped ? 100 - rawY : rawY;
+                x = Math.max(0, Math.min(x, 100));
+                y = Math.max(0, Math.min(y, 100));
+
+                activeMagnet.style.left = `${x}%`; activeMagnet.style.top = `${y}%`;
+                activeMagnet.dataset.currX = x; activeMagnet.dataset.currY = y;
+
+                if (isSetupMode) {
+                    activeMagnet.dataset.startX = x; activeMagnet.dataset.startY = y;
+                    const line = document.getElementById(`line-${activeMagnet.dataset.id}`);
+                    line.setAttribute('x1', `${x}%`); line.setAttribute('y1', `${y}%`);
+                    line.setAttribute('x2', `${x}%`); line.setAttribute('y2', `${y}%`);
+                    line.style.opacity = '0';
+                } else {
+                    updateArrow(activeMagnet);
+                }
+            });
+
+            pitch.addEventListener('pointerup', (e) => {
+                if (activeMagnet) { activeMagnet.releasePointerCapture(e.pointerId); activeMagnet = null; }
+            });
+            pitch.addEventListener('dragstart', e => e.preventDefault());
+        }
+
+        function updateArrow(magnet) {
+            const line = document.getElementById(`line-${magnet.dataset.id}`);
+            const dx = magnet.dataset.currX - magnet.dataset.startX;
+            const dy = magnet.dataset.currY - magnet.dataset.startY;
+            if ((dx * dx) + (dy * dy) > 0.5) {
+                line.setAttribute('x2', `${magnet.dataset.currX}%`);
+                line.setAttribute('y2', `${magnet.dataset.currY}%`);
+                line.style.opacity = '1';
+            } else { line.style.opacity = '0'; }
+        }
+
+        init();
+    </script>
+</body>
+</html>
