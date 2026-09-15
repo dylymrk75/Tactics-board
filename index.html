@@ -4,14 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Apex Tactics - Coach Board</title>
-    <!-- Include html2canvas for capturing the board -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
         :root {
-            /* Premium Dark Theme Colors */
-            --bg-base: #09090b;       
+            var(--bg-base): #09090b;       
             --bg-panel: #18181b;      
             --bg-card: #27272a;       
             --bg-card-hover: #3f3f46;
@@ -19,11 +17,9 @@
             --text-main: #f8fafc;
             --text-muted: #a1a1aa;
             
-            /* Enhanced Pitch Colors */
             --pitch-bg: #1b4d2e;      
             --pitch-lines: rgba(255, 255, 255, 0.45);
             
-            /* Tactical Chip Colors */
             --home-bg: #ef4444;       
             --home-arrow: #f87171;
             --opp-bg: #3b82f6;        
@@ -43,7 +39,7 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background-color: var(--bg-base);
+            background-color: #09090b;
             color: var(--text-main);
             display: flex;
             flex-direction: column;
@@ -51,7 +47,6 @@
             overflow: hidden;
         }
 
-        /* --- PITCH AREA --- */
         .pitch-wrapper {
             flex: 1;
             display: flex;
@@ -92,7 +87,6 @@
 
         #arrows-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
 
-        /* Tactical Chips (Magnets) */
         .magnet {
             position: absolute;
             transform: translate(-50%, -50%) rotate(0deg);
@@ -104,7 +98,6 @@
             font-weight: 700;
             box-shadow: 0 4px 8px rgba(0,0,0,0.5);
             cursor: grab;
-            /* Removed the 'left' and 'top' transitions to restore fluid 1-to-1 drag feel */
             transition: box-shadow 0.2s, transform 0.5s ease-in-out;
         }
 
@@ -130,7 +123,6 @@
         .no-transition { transition: none !important; }
         .is-resetting { transition: left 0.4s ease, top 0.4s ease, transform 0.5s ease-in-out !important; }
 
-        /* --- BOTTOM UI PANEL --- */
         .bottom-panel {
             background-color: var(--bg-panel);
             border-top: 1px solid rgba(255, 255, 255, 0.05);
@@ -145,7 +137,7 @@
 
         .tab-header { 
             display: flex; 
-            background-color: var(--bg-base);
+            background-color: #09090b;
             border: 1px solid var(--bg-card);
             border-radius: 999px;
             padding: 4px;
@@ -159,12 +151,8 @@
         
         .tab-btn.active { background-color: var(--bg-card); color: var(--text-main); box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
 
-        /* Locked height to prevent pitch shifting when swapping tabs */
         .tab-content { 
-            display: none; 
-            flex-direction: column; 
-            gap: 10px; 
-            min-height: 106px; /* 48px + 10px gap + 48px = 106px exact height of 2 rows */
+            display: none; flex-direction: column; gap: 10px; min-height: 106px; 
         }
         .tab-content.active { display: flex; }
 
@@ -230,7 +218,6 @@
             <div class="tab-btn" data-tab="actions">Actions</div>
         </div>
 
-        <!-- Tab 1: Teams & Formations -->
         <div class="tab-content active" id="tab-teams">
             <div class="form-row">
                 <select id="config-select" style="flex: 1;">
@@ -248,7 +235,6 @@
             </div>
         </div>
 
-        <!-- Tab 2: Scenarios -->
         <div class="tab-content" id="tab-scenarios">
             <div class="form-row">
                 <select id="scenario-select" style="border-color: rgba(59, 130, 246, 0.4);">
@@ -271,7 +257,6 @@
             </div>
         </div>
 
-        <!-- Tab 3: Actions & Controls -->
         <div class="tab-content" id="tab-actions">
             <div class="form-row">
                 <button id="mode-toggle" class="mode-setup">✏️ Draw Moves: OFF</button>
@@ -287,7 +272,6 @@
     </div>
 
     <script>
-        // --- 1. CONFIG & DATA ---
         const formations = {
             "11v11": {
                 "4-4-2": [{x:50,y:92,r:'GK'}, {x:15,y:75,r:'LB'}, {x:35,y:78,r:'CB'}, {x:65,y:78,r:'CB'}, {x:85,y:75,r:'RB'}, {x:15,y:50,r:'LM'}, {x:35,y:52,r:'CM'}, {x:65,y:52,r:'CM'}, {x:85,y:50,r:'RM'}, {x:35,y:25,r:'CF'}, {x:65,y:25,r:'ST'}],
@@ -344,7 +328,6 @@
             }
         };
 
-        // --- 2. DOM ELEMENTS ---
         const configSelect = document.getElementById('config-select');
         const labelModeSelect = document.getElementById('label-mode-select');
         const homeFormSelect = document.getElementById('home-formation-select');
@@ -367,14 +350,12 @@
         let isFlipped = false;
         let labelMode = 'positions';
 
-        // --- 3. UI TAB LOGIC ---
         function switchTab(tabId) {
             tabBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tabId));
             tabContents.forEach(content => content.classList.toggle('active', content.id === `tab-${tabId}`));
         }
         tabBtns.forEach(btn => btn.addEventListener('click', () => switchTab(btn.dataset.tab)));
 
-        // --- 4. BOARD LOGIC ---
         function init() {
             labelMode = labelModeSelect.value;
             updateFormationDropdowns();
@@ -482,14 +463,12 @@
             });
         }
 
-        // --- 5. EXPORT SEQUENCE ---
         async function exportSequence() {
             exportBtn.innerHTML = "⏳ Exporting...";
             exportBtn.disabled = true;
 
             magnets.forEach(m => m.classList.add('no-transition'));
 
-            // Frame 1
             magnets.forEach(m => {
                 m.style.left = `${m.dataset.startX}%`;
                 m.style.top = `${m.dataset.startY}%`;
@@ -498,7 +477,6 @@
             await new Promise(r => setTimeout(r, 150)); 
             const canvas1 = await html2canvas(pitch, { backgroundColor: '#1b4d2e', scale: 2 });
 
-            // Frame 2
             magnets.forEach(m => {
                 m.style.left = `${m.dataset.currX}%`;
                 m.style.top = `${m.dataset.currY}%`;
@@ -509,7 +487,6 @@
 
             magnets.forEach(m => m.classList.remove('no-transition'));
 
-            // Stitch
             const padding = 40;
             const textHeight = 80;
             const width = (canvas1.width * 2) + (padding * 3);
@@ -532,16 +509,33 @@
             ctx.drawImage(canvas1, padding, padding + textHeight);
             ctx.drawImage(canvas2, (padding * 2) + canvas1.width, padding + textHeight);
 
-            const link = document.createElement('a');
-            link.download = `Tactics-Export-${Date.now()}.png`;
-            link.href = finalCanvas.toDataURL('image/png');
-            link.click();
-
-            exportBtn.innerHTML = "📸 Export Seq.";
-            exportBtn.disabled = false;
+            // Web Share API Implementation for Mobile Devices
+            finalCanvas.toBlob(async (blob) => {
+                const file = new File([blob], `Tactics-${Date.now()}.png`, { type: 'image/png' });
+                
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    try {
+                        await navigator.share({
+                            files: [file],
+                            title: 'Tactical Sequence',
+                            text: 'Here is the tactical setup.'
+                        });
+                    } catch (error) {
+                        console.log('Share canceled or failed', error);
+                    }
+                } else {
+                    // Desktop fallback
+                    const link = document.createElement('a');
+                    link.download = file.name;
+                    link.href = URL.createObjectURL(blob);
+                    link.click();
+                }
+                
+                exportBtn.innerHTML = "📸 Export Seq.";
+                exportBtn.disabled = false;
+            }, 'image/png');
         }
 
-        // --- 6. EVENT LISTENERS ---
         function setupEventListeners() {
             labelModeSelect.addEventListener('change', (e) => { labelMode = e.target.value; updateAllLabels(); });
             configSelect.addEventListener('change', () => { updateFormationDropdowns(); loadBoard(); });
